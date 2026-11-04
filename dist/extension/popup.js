@@ -1,5 +1,16 @@
 "use strict";
 (() => {
+  // extension/readiness.ts
+  function manualReasons(letter) {
+    return [
+      ...letter.missing.map((field) => `\u0417\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u0435: ${field}`),
+      ...letter.actions
+    ];
+  }
+  function readyLetters(letters) {
+    return letters.filter((letter) => manualReasons(letter).length === 0);
+  }
+
   // src/generated/data.json
   var data_default = {
     companies: [
@@ -895,7 +906,9 @@ ${values["\u0424\u0418\u041E"]}`
       for (const letter of letters) {
         const details = document.createElement("details");
         const summary = document.createElement("summary");
-        summary.textContent = letter.companyName;
+        const reasons = manualReasons(letter);
+        summary.textContent = letter.companyName + (reasons.length ? " \u2014 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435" : " \u2014 \u0433\u043E\u0442\u043E\u0432\u043E");
+        if (reasons.length) details.open = true;
         const text = document.createElement("pre");
         text.textContent = [
           "\u041A\u043E\u043C\u0443: " + letter.to.join(", "),
@@ -910,7 +923,8 @@ ${values["\u0424\u0418\u041E"]}`
       void chrome.storage.local.set({ profile: { fio: profile.fio, email: profile.email } }).catch(() => {
         status.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C.";
       });
-      status.textContent = `\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u043B\u0435\u043D\u043E: ${letters.length}. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0442\u0435\u043A\u0441\u0442\u044B, \u0437\u0430\u0442\u0435\u043C \u043D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u043B\u0435\u043D\u043D\u044B\u0435\xBB.`;
+      const ready = readyLetters(letters).length;
+      status.textContent = `\u0413\u043E\u0442\u043E\u0432\u043E \u043A \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0435: ${ready} \u0438\u0437 ${letters.length}. \u0422\u0440\u0435\u0431\u0443\u044E\u0442 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439: ${letters.length - ready}. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440.`;
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u043F\u0438\u0441\u044C\u043C\u0430.";
     }
@@ -952,8 +966,13 @@ ${values["\u0424\u0418\u041E"]}`
   action("#send", async () => {
     if (!prepared.length) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C\u0442\u0435 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440.");
     if (!mailbox.value) throw Error("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \u043F\u043E\u0447\u0442\u044B \u0438 \u0441\u043F\u0438\u0441\u043E\u043A \u044F\u0449\u0438\u043A\u043E\u0432.");
+    const ready = readyLetters(prepared).length;
+    if (!ready)
+      throw Error(
+        "\u041D\u0435\u0442 \u0433\u043E\u0442\u043E\u0432\u044B\u0445 \u043F\u0438\u0441\u0435\u043C. \u0412 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E, \u0447\u0442\u043E \u043D\u0443\u0436\u043D\u043E \u0437\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0438\u043B\u0438 \u043F\u0440\u0438\u043B\u043E\u0436\u0438\u0442\u044C."
+      );
     pending = { key: mailbox.value, letters: structuredClone(prepared) };
-    confirmationText.textContent = `\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C ${prepared.length} \u043F\u0438\u0441\u0435\u043C \u0441 ${mailbox.selectedOptions[0].text}?`;
+    confirmationText.textContent = `\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C ${ready} \u043F\u0438\u0441\u0435\u043C \u0441 ${mailbox.selectedOptions[0].text}? \u0422\u0440\u0435\u0431\u0443\u044E\u0442 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439 \u0438 \u043D\u0435 \u0431\u0443\u0434\u0443\u0442 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u044B: ${prepared.length - ready}.`;
     confirmation.hidden = false;
     document.querySelector("#confirm-send").focus();
   });
@@ -996,7 +1015,7 @@ ${values["\u0424\u0418\u041E"]}`
     box.replaceChildren();
     if (!queue) return;
     const title = document.createElement("p");
-    title.textContent = `${queue.email}: ${queue.running ? "\u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430" : "\u041E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E"} \xB7 ${queue.items.filter((i) => i.status === "sent").length} / ${queue.items.length}`;
+    title.textContent = `${queue.email}: ${queue.running ? "\u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430" : "\u041E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E"} \xB7 ${queue.items.filter((i) => i.status === "sent").length} / ${queue.items.filter((i) => i.status !== "manual").length} (\u0442\u0440\u0435\u0431\u0443\u044E\u0442 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439: ${queue.items.filter((i) => i.status === "manual").length})`;
     box.append(title);
     if (queue.error) {
       const p = document.createElement("p");
@@ -1004,6 +1023,7 @@ ${values["\u0424\u0418\u041E"]}`
       box.append(p);
     }
     const labels = {
+      manual: "\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435",
       queued: "\u0412 \u043E\u0447\u0435\u0440\u0435\u0434\u0438",
       sending: "\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F",
       sent: "\u041F\u0440\u0438\u043D\u044F\u0442\u043E Mail.ru",
@@ -1011,7 +1031,7 @@ ${values["\u0424\u0418\u041E"]}`
     };
     for (const item of queue.items) {
       const row = document.createElement("p");
-      row.textContent = item.letter.companyName + ": " + labels[item.status];
+      row.textContent = item.letter.companyName + ": " + labels[item.status] + (item.reasons?.length ? " \u2014 " + item.reasons.join("; ") : "");
       box.append(row);
     }
   }

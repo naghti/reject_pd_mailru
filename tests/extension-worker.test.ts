@@ -101,3 +101,40 @@ test("Restarted in-flight job becomes uncertain without retry", async () => {
   assert.equal(h.calls(), 0);
   assert.equal(h.data.queue.items[0].status, "uncertain");
 });
+
+test("One manual letter does not block other ready letters and is retained with reasons", async () => {
+  const h = await harness({
+    http: 200,
+    data: { status: 200, body: { id: "sent-id" } },
+  });
+  const manual = {
+    ...letter,
+    companyName: "Нужен PDF",
+    actions: ["Приложите PDF"],
+  };
+  const result = await h.message({
+    type: "start",
+    key: "1:2",
+    letters: [manual, letter],
+  });
+  assert.equal(result.error, undefined);
+  await h.settle();
+  assert.equal(h.calls(), 1);
+  assert.equal(h.data.queue.items[0].status, "manual");
+  assert.deepEqual(Array.from(h.data.queue.items[0].reasons), [
+    "Приложите PDF",
+  ]);
+  assert.equal(h.data.queue.items[1].status, "sent");
+});
+test("Entirely incomplete batch never creates a queue or sends", async () => {
+  const h = await harness(null);
+  const result = await h.message({
+    type: "start",
+    key: "1:2",
+    letters: [{ ...letter, missing: ["Сведения о взаимодействии"] }],
+  });
+  assert.match(result.error, /Нет готовых/);
+  await h.settle();
+  assert.equal(h.calls(), 0);
+  assert.equal(h.data.queue, undefined);
+});

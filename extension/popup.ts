@@ -1,3 +1,4 @@
+import { manualReasons, readyLetters } from "./readiness";
 import data from "../src/generated/data.json";
 import { makeLetter } from "../src/letters";
 import type { Company, Mode, Profile } from "../src/types";
@@ -99,7 +100,11 @@ form.onsubmit = (event) => {
     for (const letter of letters) {
       const details = document.createElement("details");
       const summary = document.createElement("summary");
-      summary.textContent = letter.companyName;
+      const reasons = manualReasons(letter);
+      summary.textContent =
+        letter.companyName +
+        (reasons.length ? " — требуется действие" : " — готово");
+      if (reasons.length) details.open = true;
       const text = document.createElement("pre");
       text.textContent = [
         "Кому: " + letter.to.join(", "),
@@ -116,7 +121,8 @@ form.onsubmit = (event) => {
       .catch(() => {
         status.textContent = "Не удалось сохранить профиль.";
       });
-    status.textContent = `Подготовлено: ${letters.length}. Проверьте тексты, затем нажмите «Отправить подготовленные».`;
+    const ready = readyLetters(letters).length;
+    status.textContent = `Готово к отправке: ${ready} из ${letters.length}. Требуют действий: ${letters.length - ready}. Проверьте предпросмотр.`;
   } catch (error) {
     status.textContent =
       error instanceof Error ? error.message : "Не удалось подготовить письма.";
@@ -162,8 +168,13 @@ action("#connect", refreshSessions);
 action("#send", async () => {
   if (!prepared.length) throw Error("Сначала подготовьте предпросмотр.");
   if (!mailbox.value) throw Error("Обновите вкладку почты и список ящиков.");
+  const ready = readyLetters(prepared).length;
+  if (!ready)
+    throw Error(
+      "Нет готовых писем. В предпросмотре указано, что нужно заполнить или приложить.",
+    );
   pending = { key: mailbox.value, letters: structuredClone(prepared) };
-  confirmationText.textContent = `Отправить ${prepared.length} писем с ${mailbox.selectedOptions[0].text}?`;
+  confirmationText.textContent = `Отправить ${ready} писем с ${mailbox.selectedOptions[0].text}? Требуют действий и не будут отправлены: ${prepared.length - ready}.`;
   confirmation.hidden = false;
   document.querySelector<HTMLButtonElement>("#confirm-send")!.focus();
 });
@@ -208,7 +219,7 @@ async function refreshQueue() {
   box.replaceChildren();
   if (!queue) return;
   const title = document.createElement("p");
-  title.textContent = `${queue.email}: ${queue.running ? "Отправка" : "Остановлено"} · ${queue.items.filter((i: any) => i.status === "sent").length} / ${queue.items.length}`;
+  title.textContent = `${queue.email}: ${queue.running ? "Отправка" : "Остановлено"} · ${queue.items.filter((i: any) => i.status === "sent").length} / ${queue.items.filter((i: any) => i.status !== "manual").length} (требуют действий: ${queue.items.filter((i: any) => i.status === "manual").length})`;
   box.append(title);
   if (queue.error) {
     const p = document.createElement("p");
@@ -216,6 +227,7 @@ async function refreshQueue() {
     box.append(p);
   }
   const labels: Record<string, string> = {
+    manual: "Требуется действие",
     queued: "В очереди",
     sending: "Отправляется",
     sent: "Принято Mail.ru",
@@ -223,7 +235,11 @@ async function refreshQueue() {
   };
   for (const item of queue.items) {
     const row = document.createElement("p");
-    row.textContent = item.letter.companyName + ": " + labels[item.status];
+    row.textContent =
+      item.letter.companyName +
+      ": " +
+      labels[item.status] +
+      (item.reasons?.length ? " — " + item.reasons.join("; ") : "");
     box.append(row);
   }
 }

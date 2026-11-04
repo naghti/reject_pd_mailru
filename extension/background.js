@@ -1,4 +1,5 @@
 import { sendFields, acknowledged } from "./api.ts";
+import { manualReasons, readyLetters } from "./readiness.ts";
 // Secrets use browser-session memory, never persistent queue history.
 const sessions = new Map();
 const loaded = chrome.storage.session.get("sessions").then((v) => {
@@ -156,11 +157,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
           throw Error("Нет писем");
         const s = sessions.get(message.key);
         if (!s) throw Error("Обновите вкладку почты");
+        if (!readyLetters(message.letters).length)
+          throw Error("Нет готовых писем. Проверьте причины в предпросмотре.");
         const items = message.letters.map((letter) => {
-          if (letter.missing.length || letter.actions.length)
-            throw Error(
-              "Есть письма с незаполненными полями или дополнительными действиями",
-            );
+          const reasons = manualReasons(letter);
+          if (reasons.length) return { letter, status: "manual", reasons };
           sendFields(letter, s.email, s.token, "validation");
           return { letter, status: "queued" };
         });

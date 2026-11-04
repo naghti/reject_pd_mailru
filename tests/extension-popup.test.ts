@@ -111,3 +111,27 @@ test("Cancel and Escape dismiss without sending; edits invalidate confirmation",
     f.dom.window.close();
   }
 });
+
+test("Select all shows 48 ready letters and two manual letters before confirmation", async () => {
+  const f = await fixture();
+  try {
+    f.click("#select-all");
+    f.d
+      .querySelector("form")!
+      .dispatchEvent(new f.dom.window.Event("submit", { cancelable: true }));
+    assert.match(f.d.querySelector("#status")!.textContent!, /48 из 50/);
+    f.click("#send");
+    await f.settle();
+    assert.match(
+      f.d.querySelector("#confirmation-text")!.textContent!,
+      /Отправить 48 писем/,
+    );
+    assert.match(
+      f.d.querySelector("#confirmation-text")!.textContent!,
+      /не будут отправлены: 2/,
+    );
+    assert.equal(f.messages.filter((m) => m.type === "start").length, 0);
+  } finally {
+    f.dom.window.close();
+  }
+});
