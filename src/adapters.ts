@@ -20,6 +20,13 @@ export function identifyAccount(
   href = location.href,
 ): Account | null {
   const url = new URL(href);
+  if (url.protocol === "https:" && !url.port && url.hostname === "e.mail.ru")
+    return {
+      provider: "mailru",
+      email: "",
+      baseUrl: `${url.origin}/`,
+      useCurrentSession: true,
+    };
   const gmail = url.hostname === "mail.google.com";
   if (!gmail && !/^mail\.yandex\.(ru|com|by|kz)$/.test(url.hostname))
     return null;
@@ -81,8 +88,8 @@ export function matchesMailContext(
   if (expected.useCurrentSession) {
     const current = currentMailContext(doc, href);
     return (
-      expected.provider === "yandex" &&
-      current?.provider === "yandex" &&
+      (expected.provider === "yandex" || expected.provider === "mailru") &&
+      current?.provider === expected.provider &&
       expected.baseUrl === current.baseUrl
     );
   }
@@ -179,12 +186,16 @@ function insertRecipient(el: HTMLElement, address: string) {
   );
 }
 const bodies = {
+  mailru:
+    '.cke_editable[contenteditable="true"], .editable-container [contenteditable="true"], [contenteditable="true"][role="textbox"][aria-label="Текст письма"]',
   gmail:
     '[contenteditable="true"][role="textbox"][aria-label="Message Body"], [contenteditable="true"][role="textbox"][aria-label="Текст письма"]',
   yandex:
     '.cke_wysiwyg_div[contenteditable="true"], .composeReact-MBody [contenteditable="true"], .ComposeMbody [contenteditable="true"]',
 };
 function composeButton(provider: Account["provider"]) {
+  if (provider === "mailru")
+    return one("a.compose-button, button.compose-button");
   if (provider === "yandex") {
     const b = one(
       '.mail-ComposeButton, .mail-ComposeButton-Wrap a, [data-testid="compose-button"]',
@@ -209,7 +220,11 @@ function recipientAddresses(
   provider: Account["provider"],
 ): string[] {
   if (provider === "yandex") return yandexRecipientAddresses(root);
-  const chips = root.querySelectorAll("[email], [data-hovercard-id]");
+  const chips = root.querySelectorAll(
+    provider === "mailru"
+      ? ".contacts--recipient [data-email], .contacts--recipient, .contacts [data-email]"
+      : "[email], [data-hovercard-id]",
+  );
   return [
     ...new Set(
       [...chips]
@@ -274,14 +289,14 @@ export async function fillLetter(
     account.provider === "gmail"
       ? body.closest('[role="dialog"]') || body.closest("form")
       : body.closest(
-          '.ComposePopup, .composeReact, .compose, [data-testid="compose"]',
+          '.compose-app, .compose-window, .ComposePopup, .composeReact, .compose, [data-testid="compose"]',
         );
   if (!(root instanceof HTMLElement))
     throw new EditorError("editor_root_missing");
   const subject = one(
     account.provider === "gmail"
       ? 'input[name="subjectbox"]'
-      : 'input[name="subject"], .composeTextField[name="subj"], input[name="subj"]',
+      : 'input[name="Subject"], input[name="subject"], .composeTextField[name="subj"], input[name="subj"]',
     root,
   );
   if (!(subject instanceof HTMLInputElement))
@@ -291,7 +306,7 @@ export async function fillLetter(
     throw new EditorError("existing_recipients");
   // Signature-only content is allowed only in the provider's explicitly marked signature block.
   const signature = body.querySelector(
-    ".gmail_signature, .mail-Signature, .compose-signature",
+    ".gmail_signature, .mail-Signature, .compose-signature, [data-signature]",
   );
   if (
     body.textContent?.trim() &&
@@ -302,10 +317,15 @@ export async function fillLetter(
   const findRecipient = () =>
     account.provider === "yandex"
       ? resolveYandexTo(root, visible)
-      : one(
-          'input[name="to"], textarea[name="to"], input[role="combobox"][aria-label="To recipients"], input[role="combobox"][aria-label="Получатели"]',
-          root,
-        );
+      : account.provider === "mailru"
+        ? one(
+            '.container--field[data-type="to"] input, .contacts[name="to"] input, input[name="To"], input[name="to"], input[aria-label="Кому"]',
+            root,
+          )
+        : one(
+            'input[name="to"], textarea[name="to"], input[role="combobox"][aria-label="To recipients"], input[role="combobox"][aria-label="Получатели"]',
+            root,
+          );
   // Recipient widgets can mount after the message body. Wait before any writes.
   await waitFor(findRecipient, signal, 10000, "recipients_missing");
   guard();
@@ -315,6 +335,11 @@ export async function fillLetter(
     throw new EditorError("existing_recipients");
   if (body.textContent?.trim() && body.textContent.trim() !== originalSignature)
     throw new EditorError("existing_body");
+  if (account.provider === "mailru") {
+    const recipient = findRecipient();
+    if (recipient instanceof HTMLInputElement && recipient.value.trim())
+      throw new EditorError("existing_recipients");
+  }
   if (account.provider === "yandex" && yandexHasPendingRecipient(root, visible))
     throw new EditorError("existing_recipients");
   // Yandex must receive the full recipient set in one editing transaction.

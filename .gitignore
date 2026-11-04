@@ -5,3 +5,5 @@ output/
 coverage/
 .playwright-cli/
 *.tsbuildinfo
+
+*.har

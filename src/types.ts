@@ -40,7 +40,7 @@ export interface Letter {
 export interface Account {
   useCurrentSession?: true;
   uid?: string;
-  provider: "gmail" | "yandex";
+  provider: "gmail" | "yandex" | "mailru";
   email: string;
   baseUrl: string;
 }

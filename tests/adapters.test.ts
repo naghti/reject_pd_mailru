@@ -18,15 +18,20 @@ const message: Letter = {
   missing: [],
   actions: [],
 };
-function fixture(provider: "gmail" | "yandex", existing = false) {
+function fixture(provider: "gmail" | "yandex" | "mailru", existing = false) {
   const dom = new JSDOM("<!doctype html><body></body>", {
     url:
       provider === "gmail"
         ? "https://mail.google.com/mail/u/1/"
-        : "https://mail.yandex.ru/",
+        : provider === "mailru"
+          ? "https://e.mail.ru/inbox/"
+          : "https://mail.yandex.ru/",
   });
   const w = dom.window;
-  const mailEditor = installMailEditorFixture(w, provider);
+  const mailEditor = installMailEditorFixture(
+    w,
+    provider === "mailru" ? "yandex" : provider,
+  );
   for (const key of [
     "document",
     "location",
@@ -54,11 +59,15 @@ function fixture(provider: "gmail" | "yandex", existing = false) {
   const create = () => {
     const wrap = w.document.createElement("div");
     if (provider === "gmail") wrap.setAttribute("role", "dialog");
-    else wrap.className = "composeReact";
+    else
+      wrap.className = provider === "mailru" ? "compose-app" : "composeReact";
     wrap.innerHTML =
       provider === "gmail"
         ? '<input name="to"><input name="subjectbox"><div role="textbox" aria-label="Message Body" contenteditable="true"></div><button id="send">Send</button>'
         : '<div class="composeYabbles"><input name="to"></div><input name="subject"><div class="composeReact-MBody"><div contenteditable="true"></div></div><button id="send">Отправить</button>';
+    if (provider === "mailru") {
+      wrap.querySelector("[contenteditable]")!.className = "cke_editable";
+    }
     mailEditor.register(wrap.querySelector<HTMLElement>("[contenteditable]")!);
     wrap.querySelector("#send")!.addEventListener("click", () => sent++);
     const input = wrap.querySelector<HTMLInputElement>('input[name="to"]')!;
@@ -85,6 +94,7 @@ function fixture(provider: "gmail" | "yandex", existing = false) {
   };
   const button = w.document.createElement("button");
   button.textContent = "Написать";
+  if (provider === "mailru") button.className = "compose-button";
   button.onclick = create;
   w.document.body.append(button);
   if (existing) create();
@@ -96,7 +106,7 @@ function fixture(provider: "gmail" | "yandex", existing = false) {
     account: identifyAccount()!,
   };
 }
-for (const provider of ["gmail", "yandex"] as const) {
+for (const provider of ["gmail", "yandex", "mailru"] as const) {
   test(`${provider}: fills two recipients and body without ever clicking Send`, async () => {
     const f = fixture(provider);
     await fillLetter(f.account, message, new AbortController().signal);
@@ -262,7 +272,7 @@ for (const field of ["recipients", "subject", "body"] as const) {
   });
 }
 
-for (const provider of ["gmail", "yandex"] as const) {
+for (const provider of ["gmail", "yandex", "mailru"] as const) {
   test(`${provider}: unrecognized recipient chip markup does not block preparation`, async () => {
     const f = fixture(provider);
     try {

@@ -774,7 +774,7 @@ async function mountPanel(onClose: () => void) {
       return;
     }
     accountNote.textContent = a
-      ? `Аккаунт: ${a.email || "Яндекс ID (идентификатор распознан)"} · ${a.provider === "gmail" ? "Gmail" : "Яндекс Почта"}`
+      ? `Аккаунт: ${a.email || "текущая сессия почты"} · ${a.provider === "mailru" ? "Mail.ru" : a.provider === "gmail" ? "Gmail" : "Яндекс Почта"}`
       : "Аккаунт пока не определён. Автоматическая работа с редактором недоступна; ручное копирование работает.";
   }
   function collapseToDock() {

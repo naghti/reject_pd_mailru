@@ -1,15 +1,10 @@
 // ==UserScript==
-// @name         Возврат ПД — подготовка обращений
-// @namespace    return-pd.local
-// @version      0.2.14
+// @name         Возврат ПД — Mail.ru
+// @namespace    return-pd-mailru.local
+// @version      0.3.0
 // @description  Рассылка по вашим шаблонам в текущей вкладке почты. Доступен режим черновиков.
-// @match        https://mail.google.com/*
-// @match        https://mail.yandex.ru/*
-// @match        https://mail.yandex.com/*
-// @match        https://mail.yandex.by/*
-// @match        https://mail.yandex.kz/*
+// @match        https://e.mail.ru/*
 // @run-at       document-idle
-// @noframes
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
@@ -470,6 +465,13 @@
   var visible = (e) => e instanceof HTMLElement && !e.hidden && e.getAttribute("aria-hidden") !== "true" && getComputedStyle(e).display !== "none" && getComputedStyle(e).visibility !== "hidden" && e.getClientRects().length > 0;
   function identifyAccount(doc = document, href = location.href) {
     const url = new URL(href);
+    if (url.protocol === "https:" && !url.port && url.hostname === "e.mail.ru")
+      return {
+        provider: "mailru",
+        email: "",
+        baseUrl: `${url.origin}/`,
+        useCurrentSession: true
+      };
     const gmail = url.hostname === "mail.google.com";
     if (!gmail && !/^mail\.yandex\.(ru|com|by|kz)$/.test(url.hostname))
       return null;
@@ -514,7 +516,7 @@
   function matchesMailContext(expected, doc = document, href = location.href) {
     if (expected.useCurrentSession) {
       const current = currentMailContext(doc, href);
-      return expected.provider === "yandex" && current?.provider === "yandex" && expected.baseUrl === current.baseUrl;
+      return (expected.provider === "yandex" || expected.provider === "mailru") && current?.provider === expected.provider && expected.baseUrl === current.baseUrl;
     }
     return sameAccount(expected, identifyAccount(doc, href));
   }
@@ -594,10 +596,13 @@
     );
   }
   var bodies = {
+    mailru: '.cke_editable[contenteditable="true"], .editable-container [contenteditable="true"], [contenteditable="true"][role="textbox"][aria-label="\u0422\u0435\u043A\u0441\u0442 \u043F\u0438\u0441\u044C\u043C\u0430"]',
     gmail: '[contenteditable="true"][role="textbox"][aria-label="Message Body"], [contenteditable="true"][role="textbox"][aria-label="\u0422\u0435\u043A\u0441\u0442 \u043F\u0438\u0441\u044C\u043C\u0430"]',
     yandex: '.cke_wysiwyg_div[contenteditable="true"], .composeReact-MBody [contenteditable="true"], .ComposeMbody [contenteditable="true"]'
   };
   function composeButton(provider) {
+    if (provider === "mailru")
+      return one("a.compose-button, button.compose-button");
     if (provider === "yandex") {
       const b = one(
         '.mail-ComposeButton, .mail-ComposeButton-Wrap a, [data-testid="compose-button"]'
@@ -615,7 +620,9 @@
   }
   function recipientAddresses(root, provider) {
     if (provider === "yandex") return yandexRecipientAddresses(root);
-    const chips = root.querySelectorAll("[email], [data-hovercard-id]");
+    const chips = root.querySelectorAll(
+      provider === "mailru" ? ".contacts--recipient [data-email], .contacts--recipient, .contacts [data-email]" : "[email], [data-hovercard-id]"
+    );
     return [
       ...new Set(
         [...chips].flatMap(
@@ -662,12 +669,12 @@
     );
     guard2();
     const root = account.provider === "gmail" ? body.closest('[role="dialog"]') || body.closest("form") : body.closest(
-      '.ComposePopup, .composeReact, .compose, [data-testid="compose"]'
+      '.compose-app, .compose-window, .ComposePopup, .composeReact, .compose, [data-testid="compose"]'
     );
     if (!(root instanceof HTMLElement))
       throw new EditorError("editor_root_missing");
     const subject = one(
-      account.provider === "gmail" ? 'input[name="subjectbox"]' : 'input[name="subject"], .composeTextField[name="subj"], input[name="subj"]',
+      account.provider === "gmail" ? 'input[name="subjectbox"]' : 'input[name="Subject"], input[name="subject"], .composeTextField[name="subj"], input[name="subj"]',
       root
     );
     if (!(subject instanceof HTMLInputElement))
@@ -676,12 +683,15 @@
     if (recipientAddresses(root, account.provider).length)
       throw new EditorError("existing_recipients");
     const signature = body.querySelector(
-      ".gmail_signature, .mail-Signature, .compose-signature"
+      ".gmail_signature, .mail-Signature, .compose-signature, [data-signature]"
     );
     if (body.textContent?.trim() && body.textContent.trim() !== signature?.textContent?.trim())
       throw new EditorError("existing_body");
     const originalSignature = signature?.textContent?.trim() || "";
-    const findRecipient = () => account.provider === "yandex" ? resolveYandexTo(root, visible) : one(
+    const findRecipient = () => account.provider === "yandex" ? resolveYandexTo(root, visible) : account.provider === "mailru" ? one(
+      '.container--field[data-type="to"] input, .contacts[name="to"] input, input[name="To"], input[name="to"], input[aria-label="\u041A\u043E\u043C\u0443"]',
+      root
+    ) : one(
       'input[name="to"], textarea[name="to"], input[role="combobox"][aria-label="To recipients"], input[role="combobox"][aria-label="\u041F\u043E\u043B\u0443\u0447\u0430\u0442\u0435\u043B\u0438"]',
       root
     );
@@ -692,6 +702,11 @@
       throw new EditorError("existing_recipients");
     if (body.textContent?.trim() && body.textContent.trim() !== originalSignature)
       throw new EditorError("existing_body");
+    if (account.provider === "mailru") {
+      const recipient = findRecipient();
+      if (recipient instanceof HTMLInputElement && recipient.value.trim())
+        throw new EditorError("existing_recipients");
+    }
     if (account.provider === "yandex" && yandexHasPendingRecipient(root, visible))
       throw new EditorError("existing_recipients");
     const recipientBatches = account.provider === "yandex" ? [letter.to] : letter.to.map((address) => [address]);
@@ -1002,10 +1017,12 @@ ${originalSignature}` : "");
     return buttons.length === 1 && enabled(buttons[0]) ? buttons[0] : null;
   }
   var notices = {
+    mailru: '[role="alert"], [role="status"], .notify, .notification, .layer-sent, .layer-sent-page, .compose-windows__notify',
     gmail: '[role="alert"], [role="status"], .bAq',
     yandex: '[role="alert"], [role="status"], .mail-Notification, .notification, .Notification, .ComposeSuccess, .ComposeDoneScreen, .ComposeDoneScreen-Title, [data-testid="compose-success"], [data-testid="compose-done"]'
   };
   var viewedMessageBodies = {
+    mailru: ".letter-body, .letter__body, .letter-body__body",
     gmail: ".a3s",
     yandex: ".js-message-body, .react-message-wrapper__body"
   };
@@ -2019,7 +2036,7 @@ ${originalSignature}` : "");
     },
     sources: [
       {
-        file: "\u0421\u043F\u0438\u0441\u043E\u043A \u043A\u043E\u043C\u043F\u0430\u043D\u0438\u0438\u0306 \u0434\u043B\u044F \u043E\u0442\u0437\u044B\u0432\u0430 \u041F\u0414.xlsx",
+        file: "\u0421\u043F\u0438\u0441\u043E\u043A \u043A\u043E\u043C\u043F\u0430\u043D\u0438\u0439 \u0434\u043B\u044F \u043E\u0442\u0437\u044B\u0432\u0430 \u041F\u0414.xlsx",
         sha256: "fc88d94ce2c2316993d915178a1a3aeabe2691ae10f60cb023d52a83b50099dd"
       },
       {
@@ -2027,11 +2044,11 @@ ${originalSignature}` : "");
         sha256: "4273ff4347d3e3d962de2715bda330fe8f32c878338479f67ec241430d76e12a"
       },
       {
-        file: "\u0428\u0430\u0431\u043B\u043E\u043D \u043E\u0442\u0437\u044B\u0432\u0430 \u041F\u0414 \u0443\u043D\u0438\u0432\u0435\u0440\u0441\u0430\u043B\u044C\u043D\u044B\u0438\u0306.docx",
+        file: "\u0428\u0430\u0431\u043B\u043E\u043D \u043E\u0442\u0437\u044B\u0432\u0430 \u041F\u0414 \u0443\u043D\u0438\u0432\u0435\u0440\u0441\u0430\u043B\u044C\u043D\u044B\u0439.docx",
         sha256: "83b0e65576c14cd7b58a9ff7accbb8266c0d1490887cf08540aa3e06744bc801"
       },
       {
-        file: "\u0428\u0430\u0431\u043B\u043E\u043D_\u0437\u0430\u043F\u0440\u043E\u0441\u0430_\u043D\u0430_\u043F\u0440\u0435\u0434\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u0435_\u0438\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u0438,_\u043A\u0430\u0441\u0430\u044E\u0449\u0435\u0438\u0306\u0441\u044F_\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0438.docx",
+        file: "\u0428\u0430\u0431\u043B\u043E\u043D_\u0437\u0430\u043F\u0440\u043E\u0441\u0430_\u043D\u0430_\u043F\u0440\u0435\u0434\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u0435_\u0438\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u0438,_\u043A\u0430\u0441\u0430\u044E\u0449\u0435\u0439\u0441\u044F_\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0438.docx",
         sha256: "24b1914816ba2af13a1ea7865c37054a29852f243d5d7023064cbce1511b0c62"
       }
     ]
@@ -2981,7 +2998,7 @@ ${values["\u0424\u0418\u041E"]}`
         accountNote.textContent = "\u042F\u043D\u0434\u0435\u043A\u0441 \u041F\u043E\u0447\u0442\u0430 \xB7 \u0442\u0435\u043A\u0443\u0449\u0430\u044F \u0441\u0435\u0441\u0441\u0438\u044F \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430. \u041F\u0438\u0441\u044C\u043C\u0430 \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u0438\u0437 \u0442\u0435\u043A\u0443\u0449\u0435\u0433\u043E \u044F\u0449\u0438\u043A\u0430; \u043E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u0435\u043B\u044C \u0443\u043A\u0430\u0437\u0430\u043D \u0432 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435 \u043F\u043E\u0447\u0442\u044B.";
         return;
       }
-      accountNote.textContent = a ? `\u0410\u043A\u043A\u0430\u0443\u043D\u0442: ${a.email || "\u042F\u043D\u0434\u0435\u043A\u0441 ID (\u0438\u0434\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u043E\u0440 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D)"} \xB7 ${a.provider === "gmail" ? "Gmail" : "\u042F\u043D\u0434\u0435\u043A\u0441 \u041F\u043E\u0447\u0442\u0430"}` : "\u0410\u043A\u043A\u0430\u0443\u043D\u0442 \u043F\u043E\u043A\u0430 \u043D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0451\u043D. \u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430 \u0441 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u043E\u043C \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430; \u0440\u0443\u0447\u043D\u043E\u0435 \u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442.";
+      accountNote.textContent = a ? `\u0410\u043A\u043A\u0430\u0443\u043D\u0442: ${a.email || "\u0442\u0435\u043A\u0443\u0449\u0430\u044F \u0441\u0435\u0441\u0441\u0438\u044F \u043F\u043E\u0447\u0442\u044B"} \xB7 ${a.provider === "mailru" ? "Mail.ru" : a.provider === "gmail" ? "Gmail" : "\u042F\u043D\u0434\u0435\u043A\u0441 \u041F\u043E\u0447\u0442\u0430"}` : "\u0410\u043A\u043A\u0430\u0443\u043D\u0442 \u043F\u043E\u043A\u0430 \u043D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0451\u043D. \u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430 \u0441 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u043E\u043C \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430; \u0440\u0443\u0447\u043D\u043E\u0435 \u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442.";
     }
     function collapseToDock() {
       overlay.hidden = true;

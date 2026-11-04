@@ -157,11 +157,14 @@ function sendButton(prepared: PreparedLetter): HTMLElement | null {
 }
 
 const notices = {
+  mailru:
+    '[role="alert"], [role="status"], .notify, .notification, .layer-sent, .layer-sent-page, .compose-windows__notify',
   gmail: '[role="alert"], [role="status"], .bAq',
   yandex:
     '[role="alert"], [role="status"], .mail-Notification, .notification, .Notification, .ComposeSuccess, .ComposeDoneScreen, .ComposeDoneScreen-Title, [data-testid="compose-success"], [data-testid="compose-done"]',
 };
 const viewedMessageBodies = {
+  mailru: ".letter-body, .letter__body, .letter-body__body",
   gmail: ".a3s",
   yandex: ".js-message-body, .react-message-wrapper__body",
 };

@@ -10,17 +10,12 @@ execFileSync(
   { stdio: "inherit" },
 );
 const header = `// ==UserScript==
-// @name         Возврат ПД — подготовка обращений
-// @namespace    return-pd.local
+// @name         Возврат ПД — Mail.ru
+// @namespace    return-pd-mailru.local
 // @version      ${version}
 // @description  Рассылка по вашим шаблонам в текущей вкладке почты. Доступен режим черновиков.
-// @match        https://mail.google.com/*
-// @match        https://mail.yandex.ru/*
-// @match        https://mail.yandex.com/*
-// @match        https://mail.yandex.by/*
-// @match        https://mail.yandex.kz/*
+// @match        https://e.mail.ru/*
 // @run-at       document-idle
-// @noframes
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue

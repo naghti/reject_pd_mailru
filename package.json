@@ -1,6 +1,6 @@
 {
-  "name": "return-pd",
-  "version": "0.2.14",
+  "name": "return-pd-mailru",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
