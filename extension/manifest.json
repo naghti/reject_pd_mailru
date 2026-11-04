@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Обращения по ПД — Mail.ru",
+  "version": "0.4.0",
+  "description": "Подготовка обращений из панели браузера",
+  "permissions": ["storage", "webRequest", "scripting", "alarms"],
+  "action": {
+    "default_title": "Обращения по ПД",
+    "default_popup": "popup.html"
+  },
+  "host_permissions": ["https://e.mail.ru/*", "https://app.mail.ru/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "minimum_chrome_version": "120"
+}

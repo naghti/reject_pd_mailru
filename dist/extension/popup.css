@@ -1,0 +1,58 @@
+body {
+  width: 540px;
+  max-height: 650px;
+  overflow: auto;
+  margin: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  background: #f7f9f5;
+  color: #183c30;
+  font: 14px system-ui;
+}
+h1 {
+  font-size: 23px;
+}
+label {
+  display: block;
+  margin: 10px 0;
+}
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid #b7c8bd;
+  border-radius: 6px;
+}
+label > input:not([type="checkbox"]),
+textarea,
+select {
+  width: 100%;
+  display: block;
+  margin-top: 5px;
+}
+button {
+  background: #204c3c;
+  color: white;
+  cursor: pointer;
+}
+#companies {
+  max-height: 180px;
+  overflow: auto;
+  background: white;
+  padding: 8px;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 13px/1.6 system-ui;
+}
+details {
+  border-top: 1px solid #b7c8bd;
+  padding: 10px 0;
+}
+#status {
+  white-space: pre-wrap;
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+  <meta charset="utf-8" /><title>Обращения по ПД</title
+  ><link rel="stylesheet" href="popup.css" />
+  <body>
+    <h1>Обращения по ПД</h1>
+    <p>Mail.ru · панель браузера</p>
+    <label>Отправитель<select id="mailbox"></select></label
+    ><button id="connect">Обновить список ящиков</button>
+    <form id="profile">
+      <label>ФИО<input name="fio" required /></label
+      ><label
+        >Email для ответа<input name="email" type="email" required /></label
+      ><label>Дата<input name="date" type="date" required /></label
+      ><label
+        >Тип обращения<select name="mode">
+          <option value="withdrawal">Отзыв согласия</option>
+          <option value="inquiry">Запрос информации</option>
+        </select></label
+      ><label
+        >Сведения о взаимодействии<textarea name="interaction"></textarea>
+      </label>
+      <label>Поиск компании<input id="search" type="search" /></label>
+      <div id="companies"></div>
+      <button type="submit">Подготовить предпросмотр</button>
+    </form>
+    <p id="status" role="status"></p>
+    <section id="preview"></section>
+    <button id="send">Отправить подготовленные</button>
+    <button id="stop">Остановить</button>
+    <button id="resume">Продолжить оставшиеся</button>
+    <section id="queue"></section>
+    <script src="popup.js"></script>
+  </body>
+</html>

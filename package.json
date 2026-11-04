@@ -11,7 +11,8 @@
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
     "preview": "node scripts/preview.mjs",
-    "format": "prettier --write src tests scripts/*.mjs package.json tsconfig.json README.md"
+    "format": "prettier --write src tests scripts/*.mjs package.json tsconfig.json README.md",
+    "build:extension": "node scripts/build-extension.mjs"
   },
   "devDependencies": {
     "@types/jsdom": "^21.1.7",
