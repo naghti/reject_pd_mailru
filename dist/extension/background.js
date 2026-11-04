@@ -1,5 +1,74 @@
 "use strict";
 (() => {
+  // extension/diagnostics.ts
+  var codes = /* @__PURE__ */ new Set([
+    "invalid",
+    "required",
+    "auth",
+    "unauthorized",
+    "forbidden",
+    "invalid_token",
+    "token_expired",
+    "access_denied",
+    "captcha",
+    "limit",
+    "limited",
+    "rate_limit",
+    "not_found",
+    "internal_error",
+    "illegal_params",
+    "ok",
+    "error",
+    "fail",
+    "failed"
+  ]);
+  function code(value) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    return typeof value === "string" && codes.has(value.toLowerCase()) ? value.toLowerCase() : null;
+  }
+  function responseSummary(response) {
+    const data = response?.data;
+    const fields = [
+      "from",
+      "email",
+      "token",
+      "body",
+      "subject",
+      "correspondents",
+      "attaches",
+      "id",
+      "source",
+      "source.draft"
+    ];
+    const errors = {};
+    for (const field of fields) {
+      const v = data?.body?.[field];
+      if (v && typeof v === "object" && "error" in v)
+        errors[field] = code(v.error) ?? "unrecognized_error";
+    }
+    return {
+      http: typeof response?.http === "number" ? response.http : null,
+      apiStatus: code(data?.status),
+      hasMessageId: typeof data?.body?.id === "string" && data.body.id.length > 0,
+      hasError: !!data?.error,
+      errorCode: code(data?.error?.code) ?? code(data?.error) ?? code(data?.code),
+      fieldErrors: errors,
+      json: !!data && typeof data === "object",
+      stage: ["network", "timeout", "parse", "response"].includes(response?.stage) ? response.stage : "no_result",
+      redirected: response?.redirected === true,
+      durationMs: typeof response?.durationMs === "number" ? response.durationMs : null
+    };
+  }
+  function executionFailure(error) {
+    const message = String(error?.message || "");
+    if (/No frame|frame.*removed|frame.*not found/i.test(message))
+      return "frame_missing";
+    if (/No tab|tab.*closed/i.test(message)) return "tab_closed";
+    if (/Cannot access|permission|not allowed/i.test(message))
+      return "permission_denied";
+    return "script_execution_failed";
+  }
+
   // extension/api.ts
   function sendFields(letter, email, token, id) {
     if (!letter.to.length || letter.to.some((e) => !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(e)) || /[\r\n]/.test(letter.subject))
@@ -55,6 +124,20 @@
 
   // extension/background.js
   var sessions = /* @__PURE__ */ new Map();
+  var logWrite = Promise.resolve();
+  function log(event, detail = {}) {
+    logWrite = logWrite.then(async () => {
+      const { diagnostics = [] } = await chrome.storage.local.get("diagnostics");
+      await chrome.storage.local.set({
+        diagnostics: [
+          ...diagnostics.slice(-199),
+          { time: (/* @__PURE__ */ new Date()).toISOString(), event, ...detail }
+        ]
+      });
+    }).catch(() => {
+    });
+    return logWrite;
+  }
   var loaded = chrome.storage.session.get("sessions").then((v) => {
     for (const [key, value] of v.sessions || [])
       if (!sessions.has(key)) sessions.set(key, value);
@@ -83,7 +166,8 @@
           email,
           token,
           tabId: details.tabId,
-          frameId: details.frameId
+          frameId: details.frameId,
+          capturedAt: Date.now()
         });
         void loaded.then(
           () => chrome.storage.session.set({ sessions: [...sessions.entries()] })
@@ -104,6 +188,7 @@
       if (!queue?.running) return;
       const item = queue.items.find((i) => i.status === "sending");
       if (item) {
+        await log("interrupted_attempt", { index: queue.items.indexOf(item) });
         item.status = "uncertain";
         queue.running = false;
         queue.error = "\u041F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0430. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \xAB\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u044B\u0435\xBB.";
@@ -118,6 +203,7 @@
       }
       const session = sessions.get(queue.sessionKey);
       if (!session || session.email !== queue.email) {
+        await log("session_unavailable");
         queue.running = false;
         queue.error = "\u0421\u0435\u0441\u0441\u0438\u044F \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \u043F\u043E\u0447\u0442\u044B \u0438 \u043D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C\xBB.";
         await chrome.storage.local.set({ queue });
@@ -129,12 +215,21 @@
         session.token,
         crypto.randomUUID().replaceAll("-", "")
       );
+      await log("send_prepared", {
+        index: queue.items.indexOf(next),
+        tabId: session.tabId,
+        frameId: session.frameId,
+        recipients: next.letter.to.length,
+        tokenPresent: !!session.token,
+        sessionAgeMs: session.capturedAt ? Date.now() - session.capturedAt : null
+      });
       next.status = "sending";
       await chrome.storage.local.set({ queue });
       try {
         const result = await chrome.scripting.executeScript({
           target: { tabId: session.tabId, frameIds: [session.frameId] },
           func: async (body) => {
+            const started = Date.now();
             try {
               const response2 = await fetch(
                 "https://e.mail.ru/api/v1/messages/send",
@@ -148,22 +243,52 @@
                   signal: AbortSignal.timeout(2e4)
                 }
               );
-              return { http: response2.status, data: await response2.json() };
-            } catch {
-              return null;
+              let data;
+              try {
+                data = await response2.json();
+              } catch {
+                return {
+                  http: response2.status,
+                  stage: "parse",
+                  redirected: response2.redirected,
+                  durationMs: Date.now() - started
+                };
+              }
+              return {
+                http: response2.status,
+                data,
+                stage: "response",
+                redirected: response2.redirected,
+                durationMs: Date.now() - started
+              };
+            } catch (error) {
+              return {
+                stage: error?.name === "TimeoutError" || error?.name === "AbortError" ? "timeout" : "network",
+                durationMs: Date.now() - started
+              };
             }
           },
           args: [payload]
         });
         const response = result[0]?.result;
+        next.diagnostic = responseSummary(response);
+        await log("send_response", {
+          index: queue.items.indexOf(next),
+          ...next.diagnostic
+        });
         next.status = response?.http === 200 && acknowledged(response.data) ? "sent" : "uncertain";
-      } catch {
+      } catch (error) {
+        next.diagnostic = { stage: executionFailure(error) };
+        await log("send_execution_error", {
+          index: queue.items.indexOf(next),
+          ...next.diagnostic
+        });
         next.status = "uncertain";
       }
       const latest = (await chrome.storage.local.get("queue")).queue;
       queue.running = !!latest?.running && next.status === "sent";
       if (next.status === "uncertain")
-        queue.error = "\u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0430. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \xAB\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u044B\u0435\xBB. \u0410\u0432\u0442\u043E\u043F\u043E\u0432\u0442\u043E\u0440 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D.";
+        queue.error = `\u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0430. \u042D\u0442\u0430\u043F: ${next.diagnostic?.stage || "unknown"}; HTTP: ${next.diagnostic?.http ?? "\u043D\u0435\u0442"}; API: ${next.diagnostic?.apiStatus ?? "\u043D\u0435\u0442"}. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \xAB\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u044B\u0435\xBB. \u0421\u043A\u0430\u0447\u0430\u0439\u0442\u0435 \u0436\u0443\u0440\u043D\u0430\u043B \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0438. \u0410\u0432\u0442\u043E\u043F\u043E\u0432\u0442\u043E\u0440 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D.`;
       await chrome.storage.local.set({ queue });
       if (queue.running)
         await chrome.alarms.create("send-next", { when: Date.now() + 5e3 });
@@ -178,6 +303,21 @@
     if (sender.id !== chrome.runtime.id) return;
     (async () => {
       await loaded;
+      if (message.type === "diagnostics") {
+        await logWrite;
+        const { diagnostics = [], queue } = await chrome.storage.local.get([
+          "diagnostics",
+          "queue"
+        ]);
+        return {
+          version: "0.4.4",
+          events: diagnostics,
+          queue: queue ? {
+            running: queue.running,
+            statuses: queue.items.map((i) => i.status)
+          } : null
+        };
+      }
       if (message.type === "sessions")
         return [...sessions.entries()].map(([key, s]) => ({
           key,
@@ -217,6 +357,10 @@
               running: true,
               items
             }
+          });
+          await log("queue_started", {
+            total: items.length,
+            ready: items.filter((i) => i.status === "queued").length
           });
           void tick();
           return true;

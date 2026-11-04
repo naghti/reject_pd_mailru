@@ -260,3 +260,22 @@ async function pollQueue() {
 }
 void pollQueue();
 setInterval(() => void pollQueue(), 1500);
+
+action("#download-log", async () => {
+  const report = await command({ type: "diagnostics" });
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download =
+    "mailru-diagnostics-" +
+    new Date().toISOString().replace(/[:.]/g, "-") +
+    ".json";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  status.textContent =
+    "Журнал скачан. В нём нет токенов, адресов и текстов писем.";
+});

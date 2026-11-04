@@ -1052,4 +1052,18 @@ ${values["\u0424\u0418\u041E"]}`
   }
   void pollQueue();
   setInterval(() => void pollQueue(), 1500);
+  action("#download-log", async () => {
+    const report = await command({ type: "diagnostics" });
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(report, null, 2)], { type: "application/json" })
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mailru-diagnostics-" + (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-") + ".json";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    status.textContent = "\u0416\u0443\u0440\u043D\u0430\u043B \u0441\u043A\u0430\u0447\u0430\u043D. \u0412 \u043D\u0451\u043C \u043D\u0435\u0442 \u0442\u043E\u043A\u0435\u043D\u043E\u0432, \u0430\u0434\u0440\u0435\u0441\u043E\u0432 \u0438 \u0442\u0435\u043A\u0441\u0442\u043E\u0432 \u043F\u0438\u0441\u0435\u043C.";
+  });
 })();

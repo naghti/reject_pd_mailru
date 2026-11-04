@@ -15,7 +15,12 @@ async function harness(response: unknown, initial?: unknown) {
   let calls = 0;
   const alarms: any[] = [];
   const local = {
-    get: async (key: string) => structuredClone({ [key]: data[key] }),
+    get: async (key: string | string[]) =>
+      structuredClone(
+        Object.fromEntries(
+          (Array.isArray(key) ? key : [key]).map((k) => [k, data[k]]),
+        ),
+      ),
     set: async (value: any) => Object.assign(data, structuredClone(value)),
   };
   const chrome = {
@@ -137,4 +142,36 @@ test("Entirely incomplete batch never creates a queue or sends", async () => {
   await h.settle();
   assert.equal(h.calls(), 0);
   assert.equal(h.data.queue, undefined);
+});
+
+test("Diagnostic export contains HTTP and API failures but no session or letter data", async () => {
+  const h = await harness({
+    http: 403,
+    data: {
+      status: 403,
+      error: { code: "invalid_token", message: "secret-address@example.org" },
+    },
+    stage: "response",
+  });
+  await h.message({ type: "start", key: "1:2", letters: [letter] });
+  await h.settle();
+  const result = await h.message({ type: "diagnostics" });
+  const json = JSON.stringify(result.value);
+  assert.ok(
+    result.value.events.some(
+      (e: any) =>
+        e.event === "send_response" &&
+        e.http === 403 &&
+        e.errorCode === "invalid_token",
+    ),
+  );
+  for (const secret of [
+    "secret-address@example.org",
+    "me@example.org",
+    "a@example.org",
+    "Текст",
+    "Тема",
+  ])
+    assert.ok(!json.includes(secret));
+  assert.equal(h.data.queue.running, false);
 });
