@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Обращения по ПД — Mail.ru",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Подготовка обращений из панели браузера",
   "permissions": ["storage", "webRequest", "scripting", "alarms"],
   "action": {

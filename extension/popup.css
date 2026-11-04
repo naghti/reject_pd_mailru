@@ -56,3 +56,21 @@ details {
 #status {
   white-space: pre-wrap;
 }
+
+footer {
+  position: sticky;
+  bottom: -20px;
+  background: #f7f9f5;
+  padding: 10px 0;
+  border-top: 1px solid #b7c8bd;
+}
+#confirmation {
+  padding: 10px;
+  border: 1px solid #204c3c;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

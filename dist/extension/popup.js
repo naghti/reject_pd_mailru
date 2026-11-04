@@ -855,6 +855,7 @@ ${values["\u0424\u0418\u041E"]}`
   });
   form.onsubmit = (event) => {
     event.preventDefault();
+    prepared = [];
     const preview = document.querySelector("#preview");
     preview.replaceChildren();
     try {
@@ -928,8 +929,13 @@ ${values["\u0424\u0418\u041E"]}`
   }
   function action(id, run) {
     document.querySelector(id).onclick = () => {
+      const button = document.querySelector(id);
+      if (button.disabled) return;
+      button.disabled = true;
       void run().catch((e) => {
         status.textContent = e.message;
+      }).finally(() => {
+        button.disabled = false;
       });
     };
   }
@@ -937,11 +943,32 @@ ${values["\u0424\u0418\u041E"]}`
   action("#send", async () => {
     if (!prepared.length) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C\u0442\u0435 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440.");
     if (!mailbox.value) throw Error("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \u043F\u043E\u0447\u0442\u044B \u0438 \u0441\u043F\u0438\u0441\u043E\u043A \u044F\u0449\u0438\u043A\u043E\u0432.");
-    if (!confirm(
-      `\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C ${prepared.length} \u043F\u0438\u0441\u0435\u043C \u0441 ${mailbox.selectedOptions[0].text}?`
-    ))
-      return;
-    await command({ type: "start", key: mailbox.value, letters: prepared });
+    pending = { key: mailbox.value, letters: structuredClone(prepared) };
+    confirmationText.textContent = `\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C ${prepared.length} \u043F\u0438\u0441\u0435\u043C \u0441 ${mailbox.selectedOptions[0].text}?`;
+    confirmation.hidden = false;
+    document.querySelector("#confirm-send").focus();
+  });
+  var confirmation = document.querySelector("#confirmation");
+  var confirmationText = document.querySelector("#confirmation-text");
+  var pending = null;
+  function cancelConfirmation() {
+    pending = null;
+    confirmation.hidden = true;
+  }
+  action("#cancel-send", async () => {
+    cancelConfirmation();
+  });
+  mailbox.addEventListener("change", cancelConfirmation);
+  form.addEventListener("input", cancelConfirmation);
+  form.addEventListener("submit", cancelConfirmation);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") cancelConfirmation();
+  });
+  action("#confirm-send", async () => {
+    const batch = pending;
+    if (!batch) return;
+    cancelConfirmation();
+    await command({ type: "start", key: batch.key, letters: batch.letters });
     prepared = [];
     status.textContent = "\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u0437\u0430\u043F\u0443\u0449\u0435\u043D\u0430. \u041E\u043A\u043D\u043E \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u0438\u044F \u043C\u043E\u0436\u043D\u043E \u0437\u0430\u043A\u0440\u044B\u0442\u044C, \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \u043F\u043E\u0447\u0442\u044B \u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043E\u0442\u043A\u0440\u044B\u0442\u043E\u0439.";
     await refreshQueue();
@@ -982,6 +1009,18 @@ ${values["\u0424\u0418\u041E"]}`
   void refreshSessions().catch(() => {
     status.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043A \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u0438\u044E.";
   });
-  void refreshQueue();
-  setInterval(() => void refreshQueue(), 1500);
+  var refreshing = false;
+  async function pollQueue() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await refreshQueue();
+    } catch {
+      status.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u0442\u0430\u0442\u0443\u0441 \u043E\u0447\u0435\u0440\u0435\u0434\u0438.";
+    } finally {
+      refreshing = false;
+    }
+  }
+  void pollQueue();
+  setInterval(() => void pollQueue(), 1500);
 })();

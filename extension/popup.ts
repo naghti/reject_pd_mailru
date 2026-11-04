@@ -56,6 +56,7 @@ void chrome.storage.local
   });
 form.onsubmit = (event) => {
   event.preventDefault();
+  prepared = [];
   const preview = document.querySelector("#preview")!;
   preview.replaceChildren();
   try {
@@ -135,22 +136,49 @@ async function refreshSessions() {
 }
 function action(id: string, run: () => Promise<void>) {
   document.querySelector<HTMLButtonElement>(id)!.onclick = () => {
-    void run().catch((e) => {
-      status.textContent = e.message;
-    });
+    const button = document.querySelector<HTMLButtonElement>(id)!;
+    if (button.disabled) return;
+    button.disabled = true;
+    void run()
+      .catch((e) => {
+        status.textContent = e.message;
+      })
+      .finally(() => {
+        button.disabled = false;
+      });
   };
 }
 action("#connect", refreshSessions);
 action("#send", async () => {
   if (!prepared.length) throw Error("Сначала подготовьте предпросмотр.");
   if (!mailbox.value) throw Error("Обновите вкладку почты и список ящиков.");
-  if (
-    !confirm(
-      `Отправить ${prepared.length} писем с ${mailbox.selectedOptions[0].text}?`,
-    )
-  )
-    return;
-  await command({ type: "start", key: mailbox.value, letters: prepared });
+  pending = { key: mailbox.value, letters: structuredClone(prepared) };
+  confirmationText.textContent = `Отправить ${prepared.length} писем с ${mailbox.selectedOptions[0].text}?`;
+  confirmation.hidden = false;
+  document.querySelector<HTMLButtonElement>("#confirm-send")!.focus();
+});
+const confirmation = document.querySelector<HTMLElement>("#confirmation")!;
+const confirmationText =
+  document.querySelector<HTMLElement>("#confirmation-text")!;
+let pending: { key: string; letters: typeof prepared } | null = null;
+function cancelConfirmation() {
+  pending = null;
+  confirmation.hidden = true;
+}
+action("#cancel-send", async () => {
+  cancelConfirmation();
+});
+mailbox.addEventListener("change", cancelConfirmation);
+form.addEventListener("input", cancelConfirmation);
+form.addEventListener("submit", cancelConfirmation);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") cancelConfirmation();
+});
+action("#confirm-send", async () => {
+  const batch = pending;
+  if (!batch) return;
+  cancelConfirmation();
+  await command({ type: "start", key: batch.key, letters: batch.letters });
   prepared = [];
   status.textContent =
     "Очередь запущена. Окно расширения можно закрыть, вкладку почты оставьте открытой.";
@@ -192,5 +220,17 @@ async function refreshQueue() {
 void refreshSessions().catch(() => {
   status.textContent = "Не удалось подключиться к расширению.";
 });
-void refreshQueue();
-setInterval(() => void refreshQueue(), 1500);
+let refreshing = false;
+async function pollQueue() {
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    await refreshQueue();
+  } catch {
+    status.textContent = "Не удалось обновить статус очереди.";
+  } finally {
+    refreshing = false;
+  }
+}
+void pollQueue();
+setInterval(() => void pollQueue(), 1500);

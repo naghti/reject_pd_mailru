@@ -4,7 +4,7 @@
   ><link rel="stylesheet" href="popup.css" />
   <body>
     <h1>Обращения по ПД</h1>
-    <p>Mail.ru · панель браузера</p>
+    <p>Mail.ru · 0.4.1 · панель браузера</p>
     <label>Отправитель<select id="mailbox"></select></label
     ><button id="connect">Обновить список ящиков</button>
     <form id="profile">
@@ -24,11 +24,18 @@
       <div id="companies"></div>
       <button type="submit">Подготовить предпросмотр</button>
     </form>
-    <p id="status" role="status"></p>
     <section id="preview"></section>
-    <button id="send">Отправить подготовленные</button>
-    <button id="stop">Остановить</button>
-    <button id="resume">Продолжить оставшиеся</button>
+    <footer>
+      <p id="status" role="status"></p>
+      <section id="confirmation" hidden aria-label="Подтверждение отправки">
+        <p id="confirmation-text"></p>
+        <button id="confirm-send" type="button">Подтвердить отправку</button>
+        <button id="cancel-send" type="button">Отмена</button>
+      </section>
+      <button id="send">Отправить подготовленные</button>
+      <button id="stop">Остановить</button>
+      <button id="resume">Продолжить оставшиеся</button>
+    </footer>
     <section id="queue"></section>
     <script src="popup.js"></script>
   </body>
