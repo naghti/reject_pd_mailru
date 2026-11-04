@@ -835,6 +835,15 @@ ${values["\u0424\u0418\u041E"]}`
     label.append(checkbox, document.createTextNode(" " + company.name));
     list.append(label);
   }
+  document.querySelector("#select-all").onclick = () => {
+    for (const company of companies) selected.add(company.id);
+    for (const checkbox of list.querySelectorAll(
+      'input[type="checkbox"]'
+    ))
+      checkbox.checked = true;
+    form.dispatchEvent(new Event("input", { bubbles: true }));
+    status.textContent = `\u0412\u044B\u0431\u0440\u0430\u043D\u044B \u0432\u0441\u0435 \u043A\u043E\u043C\u043F\u0430\u043D\u0438\u0438: ${selected.size}. \u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C\u0442\u0435 \u043D\u043E\u0432\u044B\u0439 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440.`;
+  };
   document.querySelector("#search").oninput = (event) => {
     const query = event.target.value.toLocaleLowerCase();
     for (const label of list.querySelectorAll("label"))

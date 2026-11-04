@@ -30,6 +30,16 @@ for (const company of companies) {
   label.append(checkbox, document.createTextNode(" " + company.name));
   list.append(label);
 }
+document.querySelector<HTMLButtonElement>("#select-all")!.onclick = () => {
+  for (const company of companies) selected.add(company.id);
+  for (const checkbox of list.querySelectorAll<HTMLInputElement>(
+    'input[type="checkbox"]',
+  ))
+    checkbox.checked = true;
+  // Invalidate the previous preview and any pending send confirmation.
+  form.dispatchEvent(new Event("input", { bubbles: true }));
+  status.textContent = `Выбраны все компании: ${selected.size}. Подготовьте новый предпросмотр.`;
+};
 document.querySelector<HTMLInputElement>("#search")!.oninput = (event) => {
   const query = (event.target as HTMLInputElement).value.toLocaleLowerCase();
   for (const label of list.querySelectorAll("label"))
