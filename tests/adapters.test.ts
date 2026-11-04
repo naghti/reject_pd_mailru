@@ -18,7 +18,11 @@ const message: Letter = {
   missing: [],
   actions: [],
 };
-function fixture(provider: "gmail" | "yandex" | "mailru", existing = false) {
+function fixture(
+  provider: "gmail" | "yandex" | "mailru",
+  existing = false,
+  initialBody = "",
+) {
   const dom = new JSDOM("<!doctype html><body></body>", {
     url:
       provider === "gmail"
@@ -67,10 +71,15 @@ function fixture(provider: "gmail" | "yandex" | "mailru", existing = false) {
         : '<div class="composeYabbles"><input name="to"></div><input name="subject"><div class="composeReact-MBody"><div contenteditable="true"></div></div><button id="send">Отправить</button>';
     if (provider === "mailru") {
       wrap.querySelector("[contenteditable]")!.className = "cke_editable";
+      wrap.querySelector("[contenteditable]")!.innerHTML = initialBody;
     }
     mailEditor.register(wrap.querySelector<HTMLElement>("[contenteditable]")!);
     wrap.querySelector("#send")!.addEventListener("click", () => sent++);
     const input = wrap.querySelector<HTMLInputElement>('input[name="to"]')!;
+    if (provider === "mailru") {
+      input.removeAttribute("name");
+      input.parentElement!.setAttribute("data-type", "to");
+    }
     const commit = () => {
       const addresses =
         provider === "gmail"
@@ -277,7 +286,7 @@ for (const provider of ["gmail", "yandex", "mailru"] as const) {
     const f = fixture(provider);
     try {
       document.querySelector("button")!.addEventListener("click", () => {
-        const to = document.querySelector('input[name="to"]')!;
+        const to = document.querySelector('input[name="to"], [data-type="to"] input')!;
         to.addEventListener(provider === "gmail" ? "keydown" : "blur", () => {
           for (const chip of document.querySelectorAll(
             "[email], .composeYabble",
@@ -708,6 +717,45 @@ test("Yandex proceeds with an incomplete batch after one recipient commit attemp
     assert.equal(f.state().blurs, 1);
     assert.deepEqual(f.state().saved, [message.to[0]]);
     assert.equal(editorText(prepared.body), message.body);
+    assert.equal(f.sent(), 0);
+  } finally {
+    f.dom.window.close();
+  }
+});
+
+const mailruSignature =
+  '<div class="cke_widget_signature" contenteditable="false"><div data-signature-widget="container"><div data-signature-widget="control"><button>Подпись</button></div><div data-signature-widget="content" contenteditable="true"><div>--<br>Тестовый пользователь<br>Отправлено из Почты Mail</div></div></div></div>';
+test("Mail.ru signature widget: fills unnamed To field and preserves signature without control label", async () => {
+  const f = fixture("mailru", false, "<div><br></div>" + mailruSignature);
+  try {
+    await fillLetter(f.account, message, new AbortController().signal);
+    assert.equal(
+      editorText(document.querySelector(".cke_editable")!),
+      message.body + "\n\n--\nТестовый пользователь\nОтправлено из Почты Mail",
+    );
+    assert.deepEqual(
+      [...document.querySelectorAll(".composeYabble")].map(
+        (e) => e.textContent,
+      ),
+      message.to,
+    );
+    assert.equal(f.sent(), 0);
+  } finally {
+    f.dom.window.close();
+  }
+});
+test("Mail.ru signature does not allow overwriting text outside the widget", async () => {
+  const f = fixture("mailru", false, "<div>Мой текст</div>" + mailruSignature);
+  try {
+    await assert.rejects(
+      fillLetter(f.account, message, new AbortController().signal),
+      /уже содержит текст/,
+    );
+    assert.ok(
+      document
+        .querySelector(".cke_editable")!
+        .textContent!.includes("Мой текст"),
+    );
     assert.equal(f.sent(), 0);
   } finally {
     f.dom.window.close();

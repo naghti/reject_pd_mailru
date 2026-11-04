@@ -305,21 +305,37 @@ export async function fillLetter(
   if (recipientAddresses(root, account.provider).length)
     throw new EditorError("existing_recipients");
   // Signature-only content is allowed only in the provider's explicitly marked signature block.
-  const signature = body.querySelector(
-    ".gmail_signature, .mail-Signature, .compose-signature, [data-signature]",
-  );
+  const mailruSignature =
+    account.provider === "mailru"
+      ? body.querySelector<HTMLElement>(
+          '.cke_widget_signature [data-signature-widget="content"]',
+        )
+      : null;
+  const signature =
+    mailruSignature?.closest(".cke_widget_signature") ||
+    body.querySelector(
+      ".gmail_signature, .mail-Signature, .compose-signature, [data-signature]",
+    );
   if (
     body.textContent?.trim() &&
     body.textContent.trim() !== signature?.textContent?.trim()
   )
     throw new EditorError("existing_body");
-  const originalSignature = signature?.textContent?.trim() || "";
+  const initialBodyText = body.textContent?.trim() || "";
+  // Copy only signature content, never the widget's “Подпись” control label.
+  const signatureCopy = (mailruSignature || signature)?.cloneNode(true) as
+    HTMLElement | undefined;
+  signatureCopy?.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+  signatureCopy
+    ?.querySelectorAll("div, p")
+    .forEach((block) => block.append("\n"));
+  const originalSignature = signatureCopy?.textContent?.trim() || "";
   const findRecipient = () =>
     account.provider === "yandex"
       ? resolveYandexTo(root, visible)
       : account.provider === "mailru"
         ? one(
-            '.container--field[data-type="to"] input, .contacts[name="to"] input, input[name="To"], input[name="to"], input[aria-label="Кому"]',
+            '[data-type="to"] input, .contacts[name="to"] input, input[name="To"], input[name="to"], input[aria-label="Кому"]',
             root,
           )
         : one(
@@ -333,7 +349,7 @@ export async function fillLetter(
   if (subject.value.trim()) throw new EditorError("existing_subject");
   if (recipientAddresses(root, account.provider).length)
     throw new EditorError("existing_recipients");
-  if (body.textContent?.trim() && body.textContent.trim() !== originalSignature)
+  if (body.textContent?.trim() && body.textContent.trim() !== initialBodyText)
     throw new EditorError("existing_body");
   if (account.provider === "mailru") {
     const recipient = findRecipient();

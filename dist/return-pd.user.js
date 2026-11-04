@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Возврат ПД — Mail.ru
 // @namespace    return-pd-mailru.local
-// @version      0.3.0
+// @version      0.3.1
 // @description  Рассылка по вашим шаблонам в текущей вкладке почты. Доступен режим черновиков.
 // @match        https://e.mail.ru/*
 // @run-at       document-idle
@@ -682,14 +682,21 @@
     if (subject.value.trim()) throw new EditorError("existing_subject");
     if (recipientAddresses(root, account.provider).length)
       throw new EditorError("existing_recipients");
-    const signature = body.querySelector(
+    const mailruSignature = account.provider === "mailru" ? body.querySelector(
+      '.cke_widget_signature [data-signature-widget="content"]'
+    ) : null;
+    const signature = mailruSignature?.closest(".cke_widget_signature") || body.querySelector(
       ".gmail_signature, .mail-Signature, .compose-signature, [data-signature]"
     );
     if (body.textContent?.trim() && body.textContent.trim() !== signature?.textContent?.trim())
       throw new EditorError("existing_body");
-    const originalSignature = signature?.textContent?.trim() || "";
+    const initialBodyText = body.textContent?.trim() || "";
+    const signatureCopy = (mailruSignature || signature)?.cloneNode(true);
+    signatureCopy?.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    signatureCopy?.querySelectorAll("div, p").forEach((block) => block.append("\n"));
+    const originalSignature = signatureCopy?.textContent?.trim() || "";
     const findRecipient = () => account.provider === "yandex" ? resolveYandexTo(root, visible) : account.provider === "mailru" ? one(
-      '.container--field[data-type="to"] input, .contacts[name="to"] input, input[name="To"], input[name="to"], input[aria-label="\u041A\u043E\u043C\u0443"]',
+      '[data-type="to"] input, .contacts[name="to"] input, input[name="To"], input[name="to"], input[aria-label="\u041A\u043E\u043C\u0443"]',
       root
     ) : one(
       'input[name="to"], textarea[name="to"], input[role="combobox"][aria-label="To recipients"], input[role="combobox"][aria-label="\u041F\u043E\u043B\u0443\u0447\u0430\u0442\u0435\u043B\u0438"]',
@@ -700,7 +707,7 @@
     if (subject.value.trim()) throw new EditorError("existing_subject");
     if (recipientAddresses(root, account.provider).length)
       throw new EditorError("existing_recipients");
-    if (body.textContent?.trim() && body.textContent.trim() !== originalSignature)
+    if (body.textContent?.trim() && body.textContent.trim() !== initialBodyText)
       throw new EditorError("existing_body");
     if (account.provider === "mailru") {
       const recipient = findRecipient();
@@ -2193,7 +2200,7 @@ ${values["\u0424\u0418\u041E"]}`
     style.textContent = "button{font:14px system-ui;cursor:pointer;background:#204c3c;color:white;border:1px solid #93b6a3;border-radius:9px;padding:12px 16px;box-shadow:0 4px 20px #0003}button:focus-visible{outline:3px solid #9bd6b9}p{font:13px/1.5 system-ui;max-width:320px;padding:12px;background:white;color:#8d2929;border:1px solid #d6b3b3;border-radius:8px}[hidden]{display:none!important}";
     const trigger = doc.createElement("button");
     trigger.type = "button";
-    const label = "\u2197 \u041E\u0431\u0440\u0430\u0449\u0435\u043D\u0438\u044F \u043F\u043E \u041F\u0414 \xB7 0.2.14";
+    const label = "\u2197 \u041E\u0431\u0440\u0430\u0449\u0435\u043D\u0438\u044F \u043F\u043E \u041F\u0414 \xB7 0.3.1";
     trigger.textContent = label;
     const failure = doc.createElement("p");
     failure.hidden = true;
@@ -2262,7 +2269,7 @@ ${values["\u0424\u0418\u041E"]}`
     trigger.onclick = () => void open();
     try {
       GM_registerMenuCommand(
-        "\u041E\u0431\u0440\u0430\u0449\u0435\u043D\u0438\u044F \u043F\u043E \u041F\u0414 \xB7 0.2.14 \u2014 \u043E\u0442\u043A\u0440\u044B\u0442\u044C",
+        "\u041E\u0431\u0440\u0430\u0449\u0435\u043D\u0438\u044F \u043F\u043E \u041F\u0414 \xB7 0.3.1 \u2014 \u043E\u0442\u043A\u0440\u044B\u0442\u044C",
         () => void open()
       );
     } catch {
